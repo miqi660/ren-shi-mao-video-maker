@@ -1,0 +1,28 @@
+{
+  "name": "midi-character-video-maker",
+  "version": "1.0.0",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "build": "pkg . --targets node18-win-x64 --output dist/midi-video-maker.exe"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "MIDI Character Video Maker",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.1"
+  },
+  "pkg": {
+    "assets": [
+      "index.html",
+      "app.js",
+      "styles.css",
+      "fonts.css",
+      "fonts/**/*"
+    ],
+    "outputPath": "dist"
+  }
+}
