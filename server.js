@@ -57,6 +57,12 @@ createServer(async (req, res) => {
   }
 }).listen(port, () => {
   console.log(`MOV exporter running at http://localhost:${port}`);
+}).on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`端口 ${port} 已被占用，请先关闭占用该端口的程序，或设置 PORT 环境变量使用其他端口。`);
+    process.exit(1);
+  }
+  throw error;
 });
 
 async function renderMovStart(req, res) {
