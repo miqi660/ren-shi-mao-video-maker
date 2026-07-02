@@ -133,7 +133,7 @@ canvas.dragging {
 
 .transport {
   display: grid;
-  grid-template-columns: repeat(4, auto) minmax(200px, 1fr);
+  grid-template-columns: repeat(5, auto) minmax(200px, 1fr);
   gap: 10px;
   align-items: center;
 }
@@ -144,6 +144,16 @@ button.reset {
 }
 
 button.reset:hover {
+  background: var(--danger);
+  color: var(--text);
+}
+
+button.stop-render {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button.stop-render:hover {
   background: var(--danger);
   color: var(--text);
 }
@@ -618,6 +628,9 @@ input[type="range"] {
 
   .transport {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .transport .stop-render {
+    grid-column: span 1;
   }
 
   .time {

@@ -41,6 +41,7 @@ const els = {
   trackSelectorSection: document.getElementById("trackSelectorSection"),
   trackSelector: document.getElementById("trackSelector"),
   deleteSelectedBtn: document.getElementById("deleteSelectedBtn"),
+  stopRenderBtn: document.getElementById("stopRenderBtn"),
   guideLineCount: document.getElementById("guideLineCount"),
   guideLineCountValue: document.getElementById("guideLineCountValue"),
   guideLineSpacing: document.getElementById("guideLineSpacing"),
@@ -67,6 +68,8 @@ let defaultOpenImage = null;       // 默认张嘴图片
 let defaultOpenImageDataUrl = null;
 let draggedTrackIndex = -1; // 当前拖拽的轨道索引
 let restoring = false;      // 是否正在恢复状态（防止循环保存）
+let rendering = false;       // 是否正在导出视频
+let renderAbort = null;      // 导出中止控制器
 
 // ==================== 常量配置 ====================
 const CHARACTER_SIZE_RATIO = 0.3;  // 角色大小占画布短边的比例
@@ -105,6 +108,7 @@ els.midiFile.addEventListener("change", loadMidi);
 els.playBtn.addEventListener("click", playPreview);
 els.stopBtn.addEventListener("click", stopPreview);
 els.renderBtn.addEventListener("click", renderVideo);
+els.stopRenderBtn.addEventListener("click", stopRender);
 els.layoutBtn.addEventListener("click", autoLayout);
 els.backgroundFile.addEventListener("change", loadBackground);
 els.defaultClosedImage.addEventListener("change", (event) => loadDefaultImage(event, "closedImage"));
@@ -1122,18 +1126,34 @@ function updateTime(time) {
 
 // 渲染视频（主入口）
 async function renderVideo() {
-  if (!song) return;
+  if (!song || rendering) return;
   stopPreview();
   resizeCanvas();
   await renderVideoNative();
 }
 
+// 停止导出
+function stopRender() {
+  if (!rendering) return;
+  rendering = false;
+  if (renderAbort) {
+    renderAbort.abort();
+    renderAbort = null;
+  }
+  els.renderBtn.disabled = false;
+  els.stopRenderBtn.hidden = true;
+  setStatus("导出已停止。");
+}
+
 async function renderVideoNative() {
   if (location.protocol === "file:") {
-    setStatus("请通过本地服务打开页面才能导出 MOV：node server.js", true);
+    setStatus("请通过本地服务打开页面才能导出：node server.js", true);
     return;
   }
+  rendering = true;
+  renderAbort = new AbortController();
   els.renderBtn.disabled = true;
+  els.stopRenderBtn.hidden = false;
   try {
     setStatus("正在启动原生 GPU 渲染……");
     const payload = await buildRenderPayload();
@@ -1141,30 +1161,35 @@ async function renderVideoNative() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
+      signal: renderAbort.signal,
     });
     if (!startResponse.ok) throw new Error(await startResponse.text());
     const { id } = await startResponse.json();
     const output = await waitForRender(id);
-    // The renderer already wrote the file to disk. ProRes 4K files are huge (often
-    // many GB), so do NOT force a browser re-download into the Downloads folder —
-    // that is what triggered "无法写文件". Just surface the saved path + a manual link.
     els.downloadLink.href = output.url;
     els.downloadLink.download = output.filename;
     els.downloadLink.hidden = false;
-    setStatus(`MOV 已生成并保存在本地：${output.path}（文件较大，已直接存盘，无需重复下载）`);
+    setStatus(`已导出并保存：${output.path}`);
   } catch (error) {
-    setStatus(error.message || "MOV 导出失败。", true);
+    if (error.name === "AbortError") return;
+    setStatus(error.message || "导出失败。", true);
   } finally {
+    rendering = false;
+    renderAbort = null;
     els.renderBtn.disabled = false;
+    els.stopRenderBtn.hidden = true;
   }
 }
 
 async function renderVideoFromBrowserCanvas() {
   if (location.protocol === "file:") {
-    setStatus("请通过本地服务打开页面才能导出 MOV：node server.js", true);
+    setStatus("请通过本地服务打开页面才能导出：node server.js", true);
     return;
   }
+  rendering = true;
+  renderAbort = new AbortController();
   els.renderBtn.disabled = true;
+  els.stopRenderBtn.hidden = false;
   try {
     const transparent = els.transparentExport.checked;
     const fps = clamp(Number(els.fps.value) || 60, 12, 60);
@@ -1172,30 +1197,36 @@ async function renderVideoFromBrowserCanvas() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ fps, transparent }),
+      signal: renderAbort.signal,
     });
     if (!startResponse.ok) throw new Error(await startResponse.text());
     const { id } = await startResponse.json();
     const totalFrames = Math.ceil(song.duration * fps);
 
     for (let frame = 0; frame < totalFrames; frame += 1) {
+      if (!rendering) throw new DOMException("Aborted", "AbortError");
       const time = frame / fps;
       drawFrame(time, { transparent });
       els.seek.value = String(time);
       updateTime(time);
       const percent = Math.floor(((frame + 1) / totalFrames) * 100);
-      setStatus(`所见即所得导出 MOV：${percent}%（${frame + 1} / ${totalFrames} 帧）`);
+      setStatus(`正在导出：${percent}%（${frame + 1} / ${totalFrames} 帧）`);
       const blob = await canvasToBlob("image/png");
       const upload = await fetch(`/export-frame?id=${encodeURIComponent(id)}&index=${frame}`, {
         method: "POST",
         headers: { "content-type": "image/png" },
         body: blob,
+        signal: renderAbort.signal,
       });
       if (!upload.ok) throw new Error(await upload.text());
       await nextPaint();
     }
 
-    setStatus("正在合成 MOV，请保持页面打开。");
-    const finishResponse = await fetch(`/export-finish?id=${encodeURIComponent(id)}`, { method: "POST" });
+    setStatus("正在合成，请保持页面打开。");
+    const finishResponse = await fetch(`/export-finish?id=${encodeURIComponent(id)}`, {
+      method: "POST",
+      signal: renderAbort.signal,
+    });
     if (!finishResponse.ok) throw new Error(await finishResponse.text());
     const output = await finishResponse.json();
     const link = document.createElement("a");
@@ -1205,11 +1236,15 @@ async function renderVideoFromBrowserCanvas() {
     els.downloadLink.href = output.url;
     els.downloadLink.download = output.filename;
     els.downloadLink.hidden = false;
-    setStatus(`MOV 已生成并保存在本地：${output.path}`);
+    setStatus(`已导出并保存：${output.path}`);
   } catch (error) {
-    setStatus(error.message || "MOV 导出失败。", true);
+    if (error.name === "AbortError") return;
+    setStatus(error.message || "导出失败。", true);
   } finally {
+    rendering = false;
+    renderAbort = null;
     els.renderBtn.disabled = false;
+    els.stopRenderBtn.hidden = true;
   }
 }
 
@@ -1231,15 +1266,18 @@ function nextPaint() {
 // 等待渲染完成（轮询进度）
 async function waitForRender(id) {
   while (true) {
-    const response = await fetch(`/render-progress?id=${encodeURIComponent(id)}`);
+    if (!rendering) throw new DOMException("Aborted", "AbortError");
+    const response = await fetch(`/render-progress?id=${encodeURIComponent(id)}`, {
+      signal: renderAbort?.signal,
+    });
     if (!response.ok) throw new Error(await response.text());
     const progress = await response.json();
     if (progress.status === "done") return progress.output;
-    if (progress.status === "error") throw new Error(progress.error || "MOV 导出失败。");
+    if (progress.status === "error") throw new Error(progress.error || "导出失败。");
     const total = progress.totalFrames || 0;
     const frame = progress.frame || 0;
     const percent = total ? Math.floor((frame / total) * 100) : 0;
-    setStatus(`本地渲染 MOV：${percent}%（${frame} / ${total} 帧）`);
+    setStatus(`正在导出：${percent}%（${frame} / ${total} 帧）`);
     await delay(500);
   }
 }
