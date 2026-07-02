@@ -1,7 +1,7 @@
 # MIDI 小人物视频生成器 - 增强版
 
 ## 📢 声明
-本项目基于开源项目 [ren-shi-mao-video-maker](https://github.com/Lucas-on-the-code/ren-shi-mao-video-maker.git) 进行二次开发。感谢原作者 B站：[张卡斯](https://space.bilibili.com/) 的精彩工作！
+本项目基于开源项目 [ren-shi-mao-video-maker](https://github.com/Lucas-on-the-code/ren-shi-mao-video-maker.git) 进行二次开发。感谢原作者 B站：【张卡斯的个人空间-哔哩哔哩】 https://b23.tv/TNTZm0D 的精彩工作！
 
 ## ✨ 新增功能（相比原版）
 * 新增了 README 文档，方便快速了解和上手项目
@@ -40,3 +40,6 @@ npm run build
 
 ## 🤝 参与贡献
 如果你觉得这个修改有帮助，欢迎给原项目 [ren-shi-mao-video-maker](https://github.com/Lucas-on-the-code/ren-shi-mao-video-maker.git) 和本项目点个 Star ⭐！
+
+## 📄 许可证
+本项目基于 [MIT 许可证](LICENSE) 开源。

@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "MIDI Character Video Maker",
   "dependencies": {
     "@napi-rs/canvas": "^1.0.1"
